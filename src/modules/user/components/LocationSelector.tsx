@@ -20,41 +20,6 @@ export const LocationSelector = () => {
 
   const dropdownRef = useRef<HTMLDivElement>(null);
 
-  // Load saved location on mount
-  useEffect(() => {
-    setIsMounted(true);
-    const stored = localStorage.getItem("user_location");
-    if (stored) {
-      try {
-        setLocation(JSON.parse(stored));
-      } catch (e) {
-        console.error("Failed to parse stored location", e);
-      }
-    } else {
-      // Auto-detect on first visit
-      autoDetectLocation();
-    }
-  }, [
-    // Auto-detect on first visit
-    autoDetectLocation,
-  ]);
-
-  // Handle click outside to close dropdown
-  useEffect(() => {
-    const handleClickOutside = (event: MouseEvent) => {
-      if (
-        dropdownRef.current &&
-        !dropdownRef.current.contains(event.target as Node)
-      ) {
-        setIsOpen(false);
-      }
-    };
-    document.addEventListener("mousedown", handleClickOutside);
-    return () => {
-      document.removeEventListener("mousedown", handleClickOutside);
-    };
-  }, []);
-
   const autoDetectLocation = () => {
     if (typeof window === "undefined" || !navigator.geolocation) {
       toast.error("Geolocation is not supported by your browser");
@@ -115,6 +80,41 @@ export const LocationSelector = () => {
       { enableHighAccuracy: true, timeout: 8000, maximumAge: 0 },
     );
   };
+
+  // Load saved location on mount
+  useEffect(() => {
+    setIsMounted(true);
+    const stored = localStorage.getItem("user_location");
+    if (stored) {
+      try {
+        setLocation(JSON.parse(stored));
+      } catch (e) {
+        console.error("Failed to parse stored location", e);
+      }
+    } else {
+      // Auto-detect on first visit
+      autoDetectLocation();
+    }
+  }, [
+    // Auto-detect on first visit
+    autoDetectLocation,
+  ]);
+
+  // Handle click outside to close dropdown
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (
+        dropdownRef.current &&
+        !dropdownRef.current.contains(event.target as Node)
+      ) {
+        setIsOpen(false);
+      }
+    };
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => {
+      document.removeEventListener("mousedown", handleClickOutside);
+    };
+  }, []);
 
   const handleManualSubmit = async (e: React.FormEvent) => {
     e.preventDefault();

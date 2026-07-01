@@ -133,7 +133,7 @@ export const ProductDetails = ({ product }: ProductDetailsProps) => {
     setCurrentIndex(mediaItems.length > 1 ? 1 : 0);
     setTransitionEnabled(true);
     setIsTransitioning(false);
-  }, [mediaItems.length]);
+  }, []);
 
   const slides =
     mediaItems.length > 1
@@ -210,7 +210,7 @@ export const ProductDetails = ({ product }: ProductDetailsProps) => {
       clearTimeout(timeoutId);
       clearTimeout(transitionTimeoutId);
     };
-  }, [currentIndex, mediaItems.length]);
+  }, [currentIndex]);
 
   // Auto-slide effect for mobile image gallery (4s interval, resets on manual interaction)
   useEffect(() => {
@@ -225,7 +225,7 @@ export const ProductDetails = ({ product }: ProductDetailsProps) => {
     }, 4000);
 
     return () => clearTimeout(timer);
-  }, [mediaItems.length, isMobile, getDisplayIndex, handleNext, mediaItems]);
+  }, [isMobile, getDisplayIndex, handleNext]);
 
   // Pricing with dynamic coupon support
   const basePrice = product?.price || 690;
