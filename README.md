@@ -1,36 +1,224 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# 🎁 UpharVilla — Premium E-Commerce Platform
 
-## Getting Started
+Welcome to the comprehensive documentation repository for **UpharVilla**, a premium, high-end e-commerce platform specializing in curated gifts. This document serves as the master source of knowledge for the client, developers, and administrators managing the system.
 
-First, run the development server:
+---
 
-```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
+## 📌 Table of Contents
+1. [Product Overview & Vision](#-product-overview--vision)
+2. [Tech Stack](#-tech-stack)
+3. [System Architecture & Key Features](#-system-architecture--key-features)
+   - [Inventory Lock & Stock Reservation](#1-inventory-lock--stock-reservation)
+   - [Secure Razorpay Payment Integration](#2-secure-razorpay-payment-integration)
+   - [Branded Transactional Email System](#3-branded-transactional-email-system)
+   - [Cron Job Automation](#4-cron-job-automation)
+4. [Project Directory Structure](#-project-directory-structure)
+5. [Database Schema (`Convex`)](#-database-schema-convex)
+6. [Environment Setup & Configuration](#-environment-setup--configuration)
+7. [Running the Application Locally](#-running-the-application-locally)
+8. [Deployment Guide](#-deployment-guide)
+
+---
+
+## 🌟 Product Overview & Vision
+
+**UpharVilla** is designed to deliver a premium, seamless, and trustworthy shopping experience. The key objectives are:
+* **Zero Double-Selling:** Real-time stock locks prevent two customers from checking out the same single gift item at the exact same moment.
+* **Modern & Delightful UI:** Highly responsive web experience built with premium aesthetics (lavender purple `#ad8de9` and pink accent `#e87fa6`).
+* **Automated Customer Lifecycles:** Consistent, beautiful communication (transactional emails and follow-ups) that builds long-term customer trust.
+
+---
+
+## 🛠️ Tech Stack
+
+| Layer | Technology | Purpose |
+|---|---|---|
+| **Frontend** | [Next.js 16 (App Router)](https://nextjs.org/) | React-based server-rendered framework, routing, and UI layout. |
+| **Styling** | [Tailwind CSS v4](https://tailwindcss.com/) & Vanilla CSS | Sleek styling, custom colors, and responsive layouts. |
+| **Backend & DB**| [Convex](https://www.convex.dev/) | Serverless database, reactive queries, mutations, actions, and server crons. |
+| **Authentication**| [Better Auth](https://www.better-auth.com/) | Secure OAuth, email/OTP, and session management. |
+| **Payments** | [Razorpay SDK & API](https://razorpay.com/) | Payment processing and cryptographic signature verification. |
+| **Email (Store)** | [Brevo REST API](https://www.brevo.com/) | High-deliverability transactional emails and scheduled crons. |
+| **Email (Auth)** | [Resend](https://resend.com/) | Delivering authentication emails, OTPs, and password resets. |
+| **Media Hosting** | [ImageKit](https://imagekit.io/) | Fast CDN, media optimization, and image storage. |
+| **Linter / Formatter**| [Biome](https://biomejs.dev/) | Blazing fast formatting and code-quality checks. |
+
+---
+
+## ⚙️ System Architecture & Key Features
+
+### 1. Inventory Lock & Stock Reservation
+To maintain absolute inventory integrity, UpharVilla implements a custom temporary reservation engine:
+* **How it works:** When a customer lands on the `/checkout` page, their cart items are immediately reserved in the database using the `reservations` table.
+* **10-Minute Lock:** The reservation creates a lock with an expiration epoch (`Date.now() + 600000`). The UI displays a live countdown timer (`10:00` to `00:00`).
+* **Auto-Release:** If the checkout timer runs out, the locked stock is automatically released back to the general inventory. Returning to the cart page or exiting checkout also releases the lock immediately.
+* **Concurrency Protection:** Net available stock is calculated dynamically:
+  $$\text{Net Stock} = \text{Product Inventory} - \sum \text{Active Unexpired Reservations}$$
+
+### 2. Secure Razorpay Payment Integration
+* **Double Verification:** Payments are initialized backend-side using the Razorpay API. Once the user pays via the Razorpay Web Checkout Overlay, the transaction signature is verified on the server using **Web Crypto APIs** (`crypto.subtle.sign` in Convex) before committing the order.
+* **Order Settlement:** On successful verification:
+  1. Reserved inventory is permanently deducted.
+  2. The reservation status changes from `"reserved"` to `"completed"`.
+  3. The customer's cart is cleared.
+  4. An order record is saved, and a confirmation email is triggered.
+
+### 3. Branded Transactional Email System
+The platform utilizes **Brevo's REST API** (using native `fetch` inside Convex for maximum compatibility) to dispatch styled emails in UpharVilla's brand palette:
+* **Custom Sender Domains:** Authentication allows emails to come directly from `orders@upharvilla.in`, `support@upharvilla.in`, or `hello@upharvilla.in`.
+* **Standard HTML Wrappers:** Uniform templates ensure every communication uses the signature lavender/pink layout, complete with headers, footers, social links, and typography.
+* **Instant Notifications:** Automatic confirmation alerts are sent to both the Customer and the Admin upon new order placement. Contact/Enquiry submissions trigger an auto-response to the customer and alert the admin with a quick-reply `mailto:` action.
+
+### 4. Cron Job Automation
+Located at `convex/crons.ts`, Convex automates background schedules:
+* **10:00 AM IST:** `sendOrderReminders` — Alerts customer their gift packing is underway.
+* **11:00 AM IST:** `sendCartFollowUps` — Triggers abandoned cart emails for carts >24 hours old.
+* **12:00 PM IST:** `sendThankYouEmails` — Sent post-delivery.
+* **1:00 PM IST:** `sendReviewRequests` — Star-rating review requests sent 48-72 hours post-delivery.
+* **4:30 AM IST (22:30 UTC):** `purgeStaleDatabaseRecords` — Maintenance script to clean up expired stock locks and old carts.
+
+---
+
+## 📂 Project Directory Structure
+
+```text
+src/app/
+├── layout.tsx                    ← Root layout (Convex, BetterAuth, Theme Providers)
+├── (ecommerce)/
+│   ├── layout.tsx                ← Public Ecommerce layout (Navbar, Footer)
+│   ├── page.tsx                  ← HOME "/" (All products listed)
+│   ├── products/
+│   │   ├── page.tsx              ← Product listing page "/products"
+│   │   └── [id]/
+│   │       └── page.tsx          ← Individual Product Detail "/products/[id]"
+│   ├── cart/
+│   │   └── page.tsx              ← Customer Cart "/cart" (Protected)
+│   ├── wishlist/
+│   │   └── page.tsx              ← Wishlist page "/wishlist" (Protected)
+│   └── checkout/
+│       └── page.tsx              ← Checkout & Payment Gateway "/checkout" (Protected)
+│
+├── (auth)/
+│   └── auth/
+│       └── page.tsx              ← Authentication gateway / login "/auth"
+│
+└── (admin)/
+    ├── layout.tsx                ← Admin layout (Sidebar navigation, no public header)
+    └── admin/
+        ├── page.tsx              ← Admin Dashboard Home "/admin"
+        └── inventory/
+            └── page.tsx          ← Stock & Catalog Control "/admin/inventory"
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+---
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+## 🗄️ Database Schema (Convex)
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+The schema defines critical transactional records in `convex/schema.ts`:
 
-## Learn More
+### Reservations
+```typescript
+reservations: defineTable({
+  userId: v.id("users"),
+  productId: v.id("products"),
+  quantity: v.number(),
+  expiresAt: v.number(),      // Unix timestamp (epoch milliseconds)
+  status: v.union(v.literal("reserved"), v.literal("completed"), v.literal("released")),
+})
+.index("by_user_active", ["userId", "status"])
+.index("by_product_active", ["productId", "status"])
+.index("by_expires_at", ["expiresAt"])
+```
 
-To learn more about Next.js, take a look at the following resources:
+### Orders
+```typescript
+orders: defineTable({
+  userId: v.id("users"),
+  items: v.array(v.object({
+    productId: v.id("products"),
+    name: v.string(),
+    quantity: v.number(),
+    price: v.number(),
+    thumbnail: v.optional(v.string()),
+  })),
+  totalAmount: v.number(),
+  address: v.string(),
+  paymentId: v.string(),        // Razorpay payment ID
+  razorpayOrderId: v.string(),  // Razorpay order ID
+  orderStatus: v.union(v.literal("placed"), v.literal("processing"), v.literal("shipped"), v.literal("delivered")),
+  createdAt: v.number(),
+})
+.index("by_user", ["userId"])
+.index("by_status_created", ["orderStatus", "createdAt"])
+```
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+---
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+## 🔑 Environment Setup & Configuration
 
-## Deploy on Vercel
+To run UpharVilla, prepare two categories of environment variables. Reference the template in `.env.example`.
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+### Section A: Backend Variables (Convex Dashboard)
+Configure these on your [Convex Dashboard Settings](https://dashboard.convex.dev):
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+* **Better Auth:**
+  * `BETTER_AUTH_SECRET`: Generate a random secure hash.
+  * `SITE_URL`: Frontend site URL (e.g., `http://localhost:3000` or production URL).
+* **OAuth Credentials:**
+  * `GOOGLE_CLIENT_ID` / `GOOGLE_CLIENT_SECRET`
+  * `FACEBOOK_CLIENT_ID` / `FACEBOOK_CLIENT_SECRET`
+* **Razorpay Private credentials:**
+  * `RAZORPAY_KEY_ID` & `RAZORPAY_KEY_SECRET`
+* **Emails:**
+  * `RESEND_API_KEY`: For auth emails (`support@upharvilla.in`).
+  * `BREVO_API_KEY`: API key for Brevo transactional delivery.
+  * `BREVO_SENDER_EMAIL` & `BREVO_SENDER_NAME` (e.g. `hello@upharvilla.in`, `UpharVilla`).
+* **Meta WhatsApp Cloud API:**
+  * `WHATSAPP_ACCESS_TOKEN` & `WHATSAPP_PHONE_NUMBER_ID`
+
+### Section B: Frontend Variables (Vercel / Local `.env.local`)
+* `NEXT_PUBLIC_SITE_URL`: Site URL.
+* `CONVEX_DEPLOYMENT`: e.g. `dev:gift-box-1234`
+* `NEXT_PUBLIC_CONVEX_URL`: `https://...convex.cloud`
+* `NEXT_PUBLIC_CONVEX_SITE_URL`: `https://...convex.site`
+* `CONVEX_DEPLOY_KEY`: Deployment key for deployment updates.
+* `NEXT_PUBLIC_IMAGEKIT_PUBLIC_KEY` & `NEXT_PUBLIC_IMAGEKIT_URL_ENDPOINT`
+* `NEXT_PUBLIC_RAZORPAY_KEY_ID`
+
+---
+
+## 🚀 Running the Application Locally
+
+1. **Install Dependencies:**
+   ```bash
+   pnpm install
+   ```
+
+2. **Run Dev Environment:**
+   This starts the Next.js server locally and initializes the Convex backend synchronization:
+   ```bash
+   pnpm run dev
+   ```
+
+3. **Check Code Quality (Biome):**
+   ```bash
+   pnpm run lint    # Check formatting and lint rules
+   pnpm run format  # Auto-fix code styling issues
+   ```
+
+---
+
+## 📦 Deployment Guide
+
+UpharVilla deploys dynamically across Convex and Vercel:
+
+### 1. Build and Deploy Convex Functions
+To build the app and trigger a production Convex database synchronization, run:
+```bash
+pnpm run build
+```
+This commands runs `npx convex deploy --cmd 'next build'` behind the scenes, deploying your database schema, serverless queries, and crons directly to the live Convex database node, then compile the Next.js production bundle.
+
+### 2. Deploy Frontend (Vercel)
+Connect your GitHub repository to Vercel. Ensure all environment variables from Section B are mapped in Vercel. Vercel will automatically build the Next.js bundle and deploy to production on every push to the `main` branch.
+
