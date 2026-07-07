@@ -1,4 +1,4 @@
-import { v } from "convex/values";
+import { ConvexError, v } from "convex/values";
 import { mutation, query } from "./_generated/server";
 
 /** Get current user's admin role — lightweight, returns only the role string.
@@ -56,7 +56,7 @@ export const add = mutation({
       .query("adminUsers")
       .withIndex("by_email", (q) => q.eq("email", email))
       .first();
-    if (existing) throw new Error("This user already has admin access.");
+    if (existing) throw new ConvexError("This user already has admin access.");
 
     // Index lookup — 1 read max
     const user = await ctx.db
@@ -64,7 +64,7 @@ export const add = mutation({
       .withIndex("email_name", (q) => q.eq("email", email))
       .first();
     if (!user) {
-      throw new Error(
+      throw new ConvexError(
         "No account found with this email. They must sign up first.",
       );
     }
@@ -98,8 +98,8 @@ export const remove = mutation({
   args: { id: v.id("adminUsers") },
   handler: async (ctx, { id }) => {
     const doc = await ctx.db.get(id);
-    if (!doc) throw new Error("Admin user not found.");
-    if (doc.role === "owner") throw new Error("Cannot remove the Owner.");
+    if (!doc) throw new ConvexError("Admin user not found.");
+    if (doc.role === "owner") throw new ConvexError("Cannot remove the Owner.");
     await ctx.db.delete(id);
   },
 });
@@ -112,9 +112,9 @@ export const updateRole = mutation({
   },
   handler: async (ctx, { id, role }) => {
     const doc = await ctx.db.get(id);
-    if (!doc) throw new Error("Admin user not found.");
+    if (!doc) throw new ConvexError("Admin user not found.");
     if (doc.role === "owner")
-      throw new Error("Cannot change the Owner's role.");
+      throw new ConvexError("Cannot change the Owner's role.");
     await ctx.db.patch(id, { role });
   },
 });
@@ -167,15 +167,15 @@ export const transferOwnership = mutation({
       .first();
 
     if (currentOwner?.role !== "owner") {
-      throw new Error("Only the current Owner can transfer ownership.");
+      throw new ConvexError("Only the current Owner can transfer ownership.");
     }
 
     const targetUser = await ctx.db.get(targetId);
     if (!targetUser) {
-      throw new Error("Target team member not found.");
+      throw new ConvexError("Target team member not found.");
     }
     if (targetUser.role === "owner") {
-      throw new Error("Target is already the Owner.");
+      throw new ConvexError("Target is already the Owner.");
     }
 
     // Demote current owner to admin, promote target to owner
