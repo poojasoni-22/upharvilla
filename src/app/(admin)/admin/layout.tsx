@@ -60,10 +60,12 @@ function TotalOrdersBadge() {
 function AdminGuard({ children }: { children: React.ReactNode }) {
   const { role, isLoading } = useAdmin();
 
+  // Still fetching role from DB — show nothing
   if (isLoading) {
-    return null; // Return blank screen to hide the route's existence entirely while loading
+    return null;
   }
 
+  // Role resolved as non-admin — block access
   if (role === null) {
     return <NotFound />;
   }

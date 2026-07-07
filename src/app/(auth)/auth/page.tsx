@@ -15,7 +15,7 @@ import {
 import { AnimatePresence, motion } from "motion/react";
 import Image from "next/image";
 import { useRouter, useSearchParams } from "next/navigation";
-import { useEffect, useState } from "react";
+import { Suspense, useEffect, useState } from "react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -640,4 +640,12 @@ const AuthPage = () => {
   );
 };
 
-export default AuthPage;
+function AuthPageWrapper() {
+  return (
+    <Suspense fallback={<div className="h-screen w-full flex items-center justify-center"><div className="w-6 h-6 border-2 border-primary border-t-transparent rounded-full animate-spin" /></div>}>
+      <AuthPage />
+    </Suspense>
+  );
+}
+
+export default AuthPageWrapper;

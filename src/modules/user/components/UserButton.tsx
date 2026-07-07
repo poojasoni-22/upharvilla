@@ -22,9 +22,23 @@ export const UserButton = () => {
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
         <div className="flex items-center cursor-pointer outline-none group select-none">
-          {/* Clean User Icon instead of Avatar Image / Initial */}
-          <div className="h-9 w-9 md:h-10 md:w-10 rounded-full border border-neutral-200/80 bg-neutral-50/50 hover:bg-neutral-50 flex items-center justify-center text-neutral-600 hover:text-primary hover:border-primary/30 transition-all duration-200 shadow-xs">
-            <User className="h-4.5 w-4.5 md:h-5 md:w-5" />
+          <div className="h-9 w-9 md:h-10 md:w-10 rounded-full border border-neutral-200/80 overflow-hidden flex items-center justify-center shadow-xs transition-all duration-200 hover:border-primary/30 hover:shadow-primary/10">
+            {session.user.image ? (
+              <img
+                src={session.user.image}
+                alt={session.user.name ?? "Profile"}
+                className="h-full w-full object-cover rounded-full"
+                referrerPolicy="no-referrer"
+              />
+            ) : session.user.name ? (
+              <div className="h-full w-full bg-primary/10 flex items-center justify-center text-primary font-semibold text-sm md:text-base select-none">
+                {session.user.name.charAt(0).toUpperCase()}
+              </div>
+            ) : (
+              <div className="h-full w-full bg-neutral-50 flex items-center justify-center text-neutral-600 hover:text-primary transition-colors">
+                <User className="h-4.5 w-4.5 md:h-5 md:w-5" />
+              </div>
+            )}
           </div>
         </div>
       </DropdownMenuTrigger>

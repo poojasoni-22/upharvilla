@@ -1,7 +1,7 @@
 "use client";
 
 import { useMutation, useQuery } from "convex/react";
-import { createContext, type ReactNode, useContext, useEffect } from "react";
+import { createContext, type ReactNode, useContext, useEffect, useState } from "react";
 import { authClient } from "@/lib/auth-client";
 import { api } from "../../convex/_generated/api";
 
@@ -44,15 +44,29 @@ export function AdminProvider({ children }: { children: ReactNode }) {
 
   const ensureFirstOwner = useMutation(api.adminUsers.ensureFirstOwner);
 
-  useEffect(() => {
-    if (role === null && userId && email && name) {
-      ensureFirstOwner({ userId, email, name }).catch((err) => {
-        console.error("Failed to automatically claim ownership:", err);
-      });
-    }
-  }, [role, userId, email, name, ensureFirstOwner]);
+  // Track whether we're in the middle of the ownership-claim attempt
+  const [isCheckingOwner, setIsCheckingOwner] = useState(false);
+  const [ownerChecked, setOwnerChecked] = useState(false);
 
-  const isLoading = userId ? role === undefined : false;
+  useEffect(() => {
+    if (role === null && userId && email && name && !ownerChecked) {
+      setIsCheckingOwner(true);
+      ensureFirstOwner({ userId, email, name })
+        .catch((err) => {
+          console.error("Failed to automatically claim ownership:", err);
+        })
+        .finally(() => {
+          setIsCheckingOwner(false);
+          setOwnerChecked(true);
+        });
+    }
+    if (role !== null && role !== undefined) {
+      setOwnerChecked(true);
+    }
+  }, [role, userId, email, name, ensureFirstOwner, ownerChecked]);
+
+  // Still loading if: query pending OR ownership claim in-flight
+  const isLoading = userId ? role === undefined || isCheckingOwner : false;
   const resolvedRole = userId ? (role ?? null) : null;
 
   const value: AdminContextType = {
