@@ -9,6 +9,7 @@ import {
   NavigationMenu,
   NavigationMenuContent,
   NavigationMenuItem,
+  NavigationMenuLink,
   NavigationMenuList,
   NavigationMenuTrigger,
 } from "@/components/ui/navigation-menu";
@@ -535,17 +536,18 @@ export const Navigation = () => {
                                       : `/products?tag=${encodeURIComponent(subItem)}`
                                     : subItem.link;
                                 return (
-                                  <Link
-                                    key={label}
-                                    href={href}
-                                    onClick={closeMenu}
-                                    className="group/sublink text-[11px] md:text-xs lg:text-sm text-neutral-700 hover:text-black flex items-center justify-between w-full transition-all duration-200"
-                                  >
-                                    <span className="group-hover/sublink:underline decoration-neutral-850 decoration-1 underline-offset-4">
-                                      {label}
-                                    </span>
-                                    <ChevronRight className="w-3 h-3 lg:w-3.5 lg:h-3.5 text-neutral-600 opacity-0 -translate-x-1 group-hover/sublink:opacity-100 group-hover/sublink:translate-x-0 transition-all duration-250" />
-                                  </Link>
+                                  <NavigationMenuLink asChild key={label}>
+                                    <Link
+                                      href={href}
+                                      onClick={closeMenu}
+                                      className="group/sublink text-[11px] md:text-xs lg:text-sm text-neutral-700 hover:text-black flex items-center justify-between w-full transition-all duration-200"
+                                    >
+                                      <span className="group-hover/sublink:underline decoration-neutral-850 decoration-1 underline-offset-4">
+                                        {label}
+                                      </span>
+                                      <ChevronRight className="w-3 h-3 lg:w-3.5 lg:h-3.5 text-neutral-600 opacity-0 -translate-x-1 group-hover/sublink:opacity-100 group-hover/sublink:translate-x-0 transition-all duration-250" />
+                                    </Link>
+                                  </NavigationMenuLink>
                                 );
                               })}
                             </div>
@@ -556,35 +558,36 @@ export const Navigation = () => {
                       {/* Image / Banner columns */}
                       <div className="col-span-5 flex gap-2 md:gap-3 lg:gap-4 h-[160px] md:h-[200px] lg:h-[250px] xl:h-[280px]">
                         {item.images?.map((img, idx) => (
-                          <Link
-                            key={idx}
-                            href={
-                              item.categorySlug
-                                ? item.categorySlug.startsWith("__flag:")
-                                  ? `/products?flag=${item.categorySlug.replace("__flag:", "")}&tag=${encodeURIComponent(img.label)}`
-                                  : `/products?category=${item.categorySlug}&tag=${encodeURIComponent(img.label)}`
-                                : `/products?tag=${encodeURIComponent(img.label)}`
-                            }
-                            onClick={closeMenu}
-                            className="flex-1 relative rounded-xl overflow-hidden group/img-card shadow-md h-full block"
-                          >
-                            <Image
-                              src={img.src}
-                              alt={img.alt}
-                              fill
-                              sizes="(max-width: 1024px) 50vw, 200px"
-                              className="object-cover group-hover/img-card:scale-105 transition-transform duration-500"
-                            />
-                            <div className="absolute inset-0 bg-gradient-to-t from-black/75 via-black/20 to-transparent flex flex-col justify-end p-2 md:p-3 lg:p-4">
-                              <span className="text-white font-semibold text-[9px] md:text-[10px] lg:text-xs uppercase tracking-wider mb-0.5">
-                                {img.label}
-                              </span>
-                              <span className="text-neutral-300 text-[8px] md:text-[9px] lg:text-[10px] flex items-center gap-1 group-hover/img-card:text-white transition-colors">
-                                Shop Now{" "}
-                                <ChevronRight className="w-2.5 h-2.5" />
-                              </span>
-                            </div>
-                          </Link>
+                          <NavigationMenuLink asChild key={idx}>
+                            <Link
+                              href={
+                                item.categorySlug
+                                  ? item.categorySlug.startsWith("__flag:")
+                                    ? `/products?flag=${item.categorySlug.replace("__flag:", "")}&tag=${encodeURIComponent(img.label)}`
+                                    : `/products?category=${item.categorySlug}&tag=${encodeURIComponent(img.label)}`
+                                  : `/products?tag=${encodeURIComponent(img.label)}`
+                              }
+                              onClick={closeMenu}
+                              className="flex-1 relative rounded-xl overflow-hidden group/img-card shadow-md h-full block"
+                            >
+                              <Image
+                                src={img.src}
+                                alt={img.alt}
+                                fill
+                                sizes="(max-width: 1024px) 50vw, 200px"
+                                className="object-cover group-hover/img-card:scale-105 transition-transform duration-500"
+                              />
+                              <div className="absolute inset-0 bg-gradient-to-t from-black/75 via-black/20 to-transparent flex flex-col justify-end p-2 md:p-3 lg:p-4">
+                                <span className="text-white font-semibold text-[9px] md:text-[10px] lg:text-xs uppercase tracking-wider mb-0.5">
+                                  {img.label}
+                                </span>
+                                <span className="text-neutral-300 text-[8px] md:text-[9px] lg:text-[10px] flex items-center gap-1 group-hover/img-card:text-white transition-colors">
+                                  Shop Now{" "}
+                                  <ChevronRight className="w-2.5 h-2.5" />
+                                </span>
+                              </div>
+                            </Link>
+                          </NavigationMenuLink>
                         ))}
                       </div>
                     </NavigationMenuContent>
