@@ -12,11 +12,14 @@ Welcome to the comprehensive documentation repository for **UpharVilla**, a prem
    - [Secure Razorpay Payment Integration](#2-secure-razorpay-payment-integration)
    - [Branded Transactional Email System](#3-branded-transactional-email-system)
    - [Cron Job Automation](#4-cron-job-automation)
+   - [WhatsApp Notification Engine](#5-whatsapp-notification-engine)
 4. [Project Directory Structure](#-project-directory-structure)
 5. [Database Schema (`Convex`)](#-database-schema-convex)
 6. [Environment Setup & Configuration](#-environment-setup--configuration)
 7. [Running the Application Locally](#-running-the-application-locally)
 8. [Deployment Guide](#-deployment-guide)
+9. [📧 Brevo Deliverability & DNS Setup](#-brevo-deliverability--dns-setup)
+10. [📱 Meta WhatsApp Cloud API & Template Setup](#-meta-whatsapp-cloud-api--template-setup)
 
 ---
 
@@ -76,6 +79,10 @@ Located at `convex/crons.ts`, Convex automates background schedules:
 * **12:00 PM IST:** `sendThankYouEmails` — Sent post-delivery.
 * **1:00 PM IST:** `sendReviewRequests` — Star-rating review requests sent 48-72 hours post-delivery.
 * **4:30 AM IST (22:30 UTC):** `purgeStaleDatabaseRecords` — Maintenance script to clean up expired stock locks and old carts.
+
+### 5. WhatsApp Notification Engine
+UpharVilla integrates with the **Meta WhatsApp Business Cloud API** to send critical transactional updates. Each notification features a dynamic product image header (usually displaying the thumbnail of the first item purchased) alongside clean, formal text updates.
+* **Supported Events:** Order Confirmed, Order Shipped, Out for Delivery, and Order Delivered.
 
 ---
 
@@ -222,3 +229,113 @@ This commands runs `npx convex deploy --cmd 'next build'` behind the scenes, dep
 ### 2. Deploy Frontend (Vercel)
 Connect your GitHub repository to Vercel. Ensure all environment variables from Section B are mapped in Vercel. Vercel will automatically build the Next.js bundle and deploy to production on every push to the `main` branch.
 
+---
+
+## 📧 Brevo Deliverability & DNS Setup
+
+To ensure emails are sent directly to customer inboxes and not marked as spam by Gmail/Yahoo, domain authentication must be set up at your DNS registrar (e.g. Cloudflare, GoDaddy).
+
+### 1. DNS Records Setup
+Add the following TXT records to the root of your domain `upharvilla.in`:
+
+* **DKIM (DomainKeys Identified Mail):**
+  * **Type:** `TXT`
+  * **Host/Name:** `mail._domainkey` (or value provided by Brevo)
+  * **Value:** *(Retrieve DKIM key from Brevo: Senders & IP > Domains)*
+* **SPF (Sender Policy Framework):**
+  * **Type:** `TXT`
+  * **Host/Name:** `@` (or leave empty)
+  * **Value:** `v=spf1 include:spf.sendinblue.com ~all`
+  * *(Note: If you have an existing SPF record, merge it: `v=spf1 include:_spf.google.com include:spf.sendinblue.com ~all`)*
+* **DMARC:**
+  * **Type:** `TXT`
+  * **Host/Name:** `_dmarc`
+  * **Value:** `v=DMARC1; p=none; rua=mailto:dmarc-reports@upharvilla.in`
+
+### 2. Authorizing Senders in Brevo Dashboard
+Go to **Senders & IP > Senders** in your Brevo Dashboard and verify the following senders:
+1. `hello@upharvilla.in` (Primary brand support)
+2. `orders@upharvilla.in` (Dedicated transactional notifications)
+3. `support@upharvilla.in` (Contact & Help Desk replies)
+
+### 3. Migrating to Hosted Templates (Optional)
+Currently, the Convex code sends beautifully pre-generated HTML directly. To shift styling responsibility to Brevo's drag-and-drop builder:
+1. Design your email template inside **Brevo > Transactional > Templates** and note its **Template ID** (e.g., `12`).
+2. Update the enqueuing logic in Convex to specify `templateId` and variables instead of `htmlContent`:
+   ```typescript
+   await ctx.runMutation(internal.emails.queue.enqueue, {
+     to: [{ email: args.customerEmail, name: args.customerName }],
+     subject: `Order Confirmed: #${shortId}`,
+     templateId: 12,
+     params: { customerName: args.customerName, orderId: shortId }
+   });
+   ```
+
+---
+
+## 📱 Meta WhatsApp Cloud API & Template Setup
+
+WhatsApp notifications rely on approved pre-configured Meta utility templates. Create the following four templates in your **Meta Business Dashboard > WhatsApp > Message Templates** using **Utility** category and **English** language.
+
+### 1. Order Confirmed (`order_confirmed`)
+* **Trigger:** Success signature verification callback.
+* **Header:** Dynamic Image
+* **Body:**
+  ```text
+  Order Confirmed
+
+  Dear {{1}}, your order #{{2}} has been placed successfully.
+
+  Items: {{4}}
+  Amount Paid: {{3}}
+
+  Your order is being prepared for dispatch. You will receive shipping updates on this number.
+
+  UpharVilla | upharvilla.in
+  ```
+* **Variables:** `{{1}}` Customer Name, `{{2}}` Order ID (last 8 chars), `{{3}}` Total Amount (e.g. Rs. 2,499), `{{4}}` Items summary list.
+
+### 2. Order Shipped (`order_shipped`)
+* **Trigger:** Admin updates order status to `"shipped"`.
+* **Header:** Dynamic Image
+* **Body:**
+  ```text
+  Order Shipped
+
+  Dear {{1}}, your order #{{2}} has been shipped.
+
+  Your package is on its way. You will be notified when it is out for delivery.
+
+  UpharVilla | upharvilla.in
+  ```
+* **Variables:** `{{1}}` Customer Name, `{{2}}` Order ID.
+
+### 3. Out for Delivery (`order_out_for_delivery`)
+* **Trigger:** Admin updates status to `"out_for_delivery"`.
+* **Header:** Dynamic Image
+* **Body:**
+  ```text
+  Out for Delivery
+
+  Dear {{1}}, your order #{{2}} is out for delivery.
+
+  Our delivery partner will reach you shortly. Please keep your phone available for contact.
+
+  UpharVilla | upharvilla.in
+  ```
+* **Variables:** `{{1}}` Customer Name, `{{2}}` Order ID.
+
+### 4. Order Delivered (`order_delivered`)
+* **Trigger:** Admin updates status to `"delivered"`.
+* **Header:** Dynamic Image
+* **Body:**
+  ```text
+  Order Delivered
+
+  Dear {{1}}, your order #{{2}} has been delivered successfully.
+
+  We hope you are satisfied with your purchase. You can review your order at {{3}}
+
+  UpharVilla | upharvilla.in
+  ```
+* **Variables:** `{{1}}` Customer Name, `{{2}}` Order ID, `{{3}}` Review link (`upharvilla.in/my-orders`).
