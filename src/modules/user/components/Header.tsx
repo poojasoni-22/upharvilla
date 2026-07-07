@@ -123,7 +123,7 @@ export const Header = () => {
                   </Button>
                   <Button
                     variant="default"
-                    onClick={() => router.push("/auth")}
+                    onClick={() => router.push("/auth?mode=signup")}
                   >
                     Join Now
                   </Button>

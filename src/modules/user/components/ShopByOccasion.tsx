@@ -79,10 +79,8 @@ const ICON_MAP: Record<string, React.ElementType> = {
 };
 
 const DEFAULT_OCCASIONS = [
-  { slug: "fathers-day", label: "Father's Day", icon: "" },
   { slug: "birthday", label: "Birthday", icon: "" },
   { slug: "anniversary", label: "Anniversary", icon: "" },
-  { slug: "valentines", label: "Valentine's", icon: "" },
   { slug: "baby-shower", label: "Baby Shower", icon: "" },
   { slug: "graduation", label: "Graduation", icon: "" },
 ];
