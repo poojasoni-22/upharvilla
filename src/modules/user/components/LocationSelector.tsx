@@ -41,11 +41,11 @@ export const LocationSelector = () => {
 
           const data = await res.json();
 
-          // Try to extract city, preferring district or principalSubdivision over locality/village
+          // Try to extract city, fallback to locality, then state
           const city =
             data.city ||
-            data.principalSubdivision ||
             data.locality ||
+            data.principalSubdivision ||
             "Unknown Location";
           const pincode = data.postcode || "";
 
@@ -314,6 +314,50 @@ export const LocationSelector = () => {
           </button>
 
           <div className="relative flex items-center justify-center my-1">
+            <div className="absolute inset-0 flex items-center">
+              <div className="w-full border-t border-neutral-100" />
+            </div>
+            <span className="relative bg-white px-2 text-[10px] font-bold text-neutral-400 uppercase tracking-wider">
+              Or
+            </span>
+          </div>
+
+          <div className="flex flex-col gap-1.5">
+            <span className="text-[11px] font-bold text-neutral-500 uppercase tracking-wider">
+              Popular Cities
+            </span>
+            <div className="grid grid-cols-3 gap-1.5">
+              {[
+                { name: "Vapi", pincode: "396191", display: "Vapi, Gujarat" },
+                { name: "Valsad", pincode: "396001", display: "Valsad, Gujarat" },
+                { name: "Navsari", pincode: "396445", display: "Navsari, Gujarat" },
+                { name: "Surat", pincode: "395003", display: "Surat, Gujarat" },
+                { name: "Mumbai", pincode: "400001", display: "Mumbai, Maharashtra" },
+                { name: "Ahmedabad", pincode: "380001", display: "Ahmedabad, Gujarat" },
+              ].map((city) => (
+                <button
+                  key={city.name}
+                  type="button"
+                  onClick={() => {
+                    const newLocation: LocationState = {
+                      city: city.display,
+                      pincode: city.pincode,
+                      isManual: true,
+                    };
+                    setLocation(newLocation);
+                    localStorage.setItem("user_location", JSON.stringify(newLocation));
+                    toast.success(`Location set to ${city.display}`);
+                    setIsOpen(false);
+                  }}
+                  className="py-1.5 px-2 text-[11px] font-medium border border-neutral-200 rounded-lg hover:border-primary hover:bg-primary/5 active:scale-[0.97] transition-all cursor-pointer text-center text-neutral-700 hover:text-primary"
+                >
+                  {city.name}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          <div className="relative flex items-center justify-center my-0.5">
             <div className="absolute inset-0 flex items-center">
               <div className="w-full border-t border-neutral-100" />
             </div>
