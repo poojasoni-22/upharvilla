@@ -39,6 +39,7 @@ import type * as recentSearches from "../recentSearches.js";
 import type * as recentlyViewed from "../recentlyViewed.js";
 import type * as reviews from "../reviews.js";
 import type * as userProfiles from "../userProfiles.js";
+import type * as users from "../users.js";
 import type * as whatsapp_orderNotifications from "../whatsapp/orderNotifications.js";
 import type * as whatsapp_queue from "../whatsapp/queue.js";
 import type * as whatsapp_whatsappClient from "../whatsapp/whatsappClient.js";
@@ -82,6 +83,7 @@ declare const fullApi: ApiFromModules<{
   recentlyViewed: typeof recentlyViewed;
   reviews: typeof reviews;
   userProfiles: typeof userProfiles;
+  users: typeof users;
   "whatsapp/orderNotifications": typeof whatsapp_orderNotifications;
   "whatsapp/queue": typeof whatsapp_queue;
   "whatsapp/whatsappClient": typeof whatsapp_whatsappClient;

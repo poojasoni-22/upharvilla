@@ -1,12 +1,12 @@
 import { createClient } from "@convex-dev/better-auth";
 import { convex } from "@convex-dev/better-auth/plugins";
-import type { GenericCtx } from "@convex-dev/better-auth/utils";
+import { type GenericCtx, isRunMutationCtx } from "@convex-dev/better-auth/utils";
 import type { BetterAuthOptions } from "better-auth";
 import { betterAuth } from "better-auth";
 import { emailOTP } from "better-auth/plugins";
 import { Resend } from "resend";
 
-import { components } from "../_generated/api";
+import { components, internal } from "../_generated/api";
 import type { DataModel } from "../_generated/dataModel";
 import authConfig from "../auth.config";
 import schema from "./schema";
@@ -166,6 +166,46 @@ export const createAuthOptions = (ctx: GenericCtx<DataModel>) => {
         },
       }),
     ],
+
+    // Sync better-auth users to the main Convex user table for admin/order relations
+    databaseHooks: {
+      user: {
+        create: {
+          after: async (user) => {
+            try {
+              if (isRunMutationCtx(ctx)) {
+                await ctx.runMutation(internal.users.syncUserCreated, {
+                  id: user.id,
+                  name: user.name || "",
+                  email: user.email,
+                  emailVerified: user.emailVerified || false,
+                  image: user.image || null,
+                });
+              }
+            } catch (err) {
+              console.error("Failed to sync created user:", err);
+            }
+          },
+        },
+        update: {
+          after: async (user) => {
+            try {
+              if (isRunMutationCtx(ctx)) {
+                await ctx.runMutation(internal.users.syncUserUpdated, {
+                  id: user.id,
+                  name: user.name || "",
+                  email: user.email,
+                  emailVerified: user.emailVerified || false,
+                  image: user.image || null,
+                });
+              }
+            } catch (err) {
+              console.error("Failed to sync updated user:", err);
+            }
+          },
+        },
+      },
+    },
   } satisfies BetterAuthOptions;
 };
 

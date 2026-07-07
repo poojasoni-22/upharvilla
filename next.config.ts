@@ -25,6 +25,21 @@ const nextConfig: NextConfig = {
       },
     ],
   },
+
+  async headers() {
+    return [
+      {
+        source: "/(.*)",
+        headers: [
+          {
+            // Allow unload event for Convex websocket connection cleanup on Chrome 117+
+            key: "Permissions-Policy",
+            value: "unload=(self)",
+          },
+        ],
+      },
+    ];
+  },
 };
 
 export default nextConfig;

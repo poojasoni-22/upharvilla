@@ -14,9 +14,10 @@ export const getMyRole = query({
 
     // Fallback by email — only runs if userId didn't match
     if (email) {
+      const normalizedEmail = email.trim().toLowerCase();
       const byEmail = await ctx.db
         .query("adminUsers")
-        .withIndex("by_email", (q) => q.eq("email", email))
+        .withIndex("by_email", (q) => q.eq("email", normalizedEmail))
         .first();
       if (byEmail) return byEmail.role;
     }
@@ -51,17 +52,19 @@ export const add = mutation({
     addedBy: v.string(),
   },
   handler: async (ctx, { email, name, role, addedBy }) => {
+    const normalizedEmail = email.trim().toLowerCase();
+
     // Index lookup — 1 read max
     const existing = await ctx.db
       .query("adminUsers")
-      .withIndex("by_email", (q) => q.eq("email", email))
+      .withIndex("by_email", (q) => q.eq("email", normalizedEmail))
       .first();
     if (existing) throw new ConvexError("This user already has admin access.");
 
     // Index lookup — 1 read max
     const user = await ctx.db
       .query("user")
-      .withIndex("email_name", (q) => q.eq("email", email))
+      .withIndex("email_name", (q) => q.eq("email", normalizedEmail))
       .first();
     if (!user) {
       throw new ConvexError(
@@ -72,7 +75,7 @@ export const add = mutation({
     // 1 write
     const res = await ctx.db.insert("adminUsers", {
       userId: user._id,
-      email,
+      email: normalizedEmail,
       name,
       role,
       addedBy,
@@ -81,7 +84,7 @@ export const add = mutation({
 
     // Queue welcome team member email
     await ctx.db.insert("emailsQueue", {
-      to: [{ email, name }],
+      to: [{ email: normalizedEmail, name }],
       subject: "Welcome to the UpharVilla Team!",
       htmlContent: `<div style="font-family: sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; border: 1px solid #e5e5e5; border-radius: 12px;"><h2 style="color: #6d28d9; margin-top: 0;">Welcome to UpharVilla!</h2><p>Hi <strong>${name}</strong>,</p><p>You have been added as a <strong>${role.toUpperCase()}</strong> to the UpharVilla Admin Panel.</p><p>You can now log in using your account to view and manage orders or catalog items based on your permissions.</p><br/><p>Best regards,<br/>The UpharVilla Team</p></div>`,
       status: "pending",
@@ -141,7 +144,7 @@ export const ensureFirstOwner = mutation({
     if (!existingOwner && firstUser._id === userId) {
       await ctx.db.insert("adminUsers", {
         userId,
-        email,
+        email: email.trim().toLowerCase(),
         name,
         role: "owner",
         addedBy: "system",

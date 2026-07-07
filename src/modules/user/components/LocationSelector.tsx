@@ -1,7 +1,7 @@
 "use client";
 
 import { ChevronDown, Loader2, Locate, MapPin, X } from "lucide-react";
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 
 interface LocationState {
@@ -20,7 +20,7 @@ export const LocationSelector = () => {
 
   const dropdownRef = useRef<HTMLDivElement>(null);
 
-  const autoDetectLocation = () => {
+  const autoDetectLocation = useCallback(() => {
     if (typeof window === "undefined" || !navigator.geolocation) {
       toast.error("Geolocation is not supported by your browser");
       setError("Not supported");
@@ -41,11 +41,11 @@ export const LocationSelector = () => {
 
           const data = await res.json();
 
-          // Try to extract city, fallback to principalSubdivision or locality
+          // Try to extract city, preferring district or principalSubdivision over locality/village
           const city =
             data.city ||
-            data.locality ||
             data.principalSubdivision ||
+            data.locality ||
             "Unknown Location";
           const pincode = data.postcode || "";
 
@@ -79,9 +79,10 @@ export const LocationSelector = () => {
       },
       { enableHighAccuracy: true, timeout: 8000, maximumAge: 0 },
     );
-  };
+  }, []);
 
-  // Load saved location on mount
+  // Load saved location on mount — run exactly once
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   useEffect(() => {
     setIsMounted(true);
     const stored = localStorage.getItem("user_location");
@@ -92,13 +93,10 @@ export const LocationSelector = () => {
         console.error("Failed to parse stored location", e);
       }
     } else {
-      // Auto-detect on first visit
+      // Auto-detect on first visit (no saved location)
       autoDetectLocation();
     }
-  }, [
-    // Auto-detect on first visit
-    autoDetectLocation,
-  ]);
+  }, []); // intentionally empty — we only want this to run once on mount
 
   // Handle click outside to close dropdown
   useEffect(() => {

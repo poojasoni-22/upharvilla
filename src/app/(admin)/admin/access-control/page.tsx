@@ -1,6 +1,7 @@
 "use client";
 
 import { useMutation, useQuery } from "convex/react";
+import { ConvexError } from "convex/values";
 import { CircleUser, Crown, Plus, ShieldCheck, Trash2 } from "lucide-react";
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
@@ -68,7 +69,11 @@ export default function AccessControlPage() {
       setTransferDialogOpen(false);
       setSelectedTargetId("");
     } catch (err: any) {
-      alert(err.message || "Failed to transfer ownership");
+      const msg =
+        err instanceof ConvexError
+          ? err.data
+          : err.message || "Failed to transfer ownership";
+      alert(msg);
     } finally {
       setIsTransferring(false);
     }
@@ -89,7 +94,11 @@ export default function AccessControlPage() {
       setNewName("");
       setNewRole("manager");
     } catch (err: any) {
-      alert(err.message || "Failed to add user");
+      const msg =
+        err instanceof ConvexError
+          ? err.data
+          : err.message || "Failed to add user";
+      alert(msg);
     } finally {
       setIsSubmitting(false);
     }
@@ -100,7 +109,11 @@ export default function AccessControlPage() {
     try {
       await removeUser({ id });
     } catch (err: any) {
-      alert(err.message || "Failed to remove user");
+      const msg =
+        err instanceof ConvexError
+          ? err.data
+          : err.message || "Failed to remove user";
+      alert(msg);
     }
   };
 
@@ -111,7 +124,11 @@ export default function AccessControlPage() {
     try {
       await updateRole({ id, role });
     } catch (err: any) {
-      alert(err.message || "Failed to update role");
+      const msg =
+        err instanceof ConvexError
+          ? err.data
+          : err.message || "Failed to update role";
+      alert(msg);
     }
   };
 
