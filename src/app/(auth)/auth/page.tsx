@@ -14,8 +14,8 @@ import {
 } from "lucide-react";
 import { AnimatePresence, motion } from "motion/react";
 import Image from "next/image";
-import { useRouter, useSearchParams } from "next/navigation";
-import { Suspense, useEffect, useState } from "react";
+import { useRouter } from "next/navigation";
+import { useEffect, useState } from "react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -39,8 +39,7 @@ const isValidPassword = (pw: string) => {
 
 const AuthPage = () => {
   const { data: session, isPending } = authClient.useSession();
-  const searchParams = useSearchParams();
-  const [isLogin, setIsLogin] = useState(searchParams.get("mode") !== "signup");
+  const [isLogin, setIsLogin] = useState(true);
   const [email, setEmail] = useState("");
   const [name, setName] = useState("");
   const [password, setPassword] = useState("");
@@ -640,12 +639,4 @@ const AuthPage = () => {
   );
 };
 
-function AuthPageWrapper() {
-  return (
-    <Suspense fallback={<div className="h-screen w-full flex items-center justify-center"><div className="w-6 h-6 border-2 border-primary border-t-transparent rounded-full animate-spin" /></div>}>
-      <AuthPage />
-    </Suspense>
-  );
-}
-
-export default AuthPageWrapper;
+export default AuthPage;
