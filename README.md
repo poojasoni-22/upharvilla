@@ -339,3 +339,47 @@ WhatsApp notifications rely on approved pre-configured Meta utility templates. C
   UpharVilla | upharvilla.in
   ```
 * **Variables:** `{{1}}` Customer Name, `{{2}}` Order ID, `{{3}}` Review link (`upharvilla.in/my-orders`).
+
+---
+
+## 🔒 Security
+
+| Protection | Implementation |
+|-----------|----------------|
+| Price tampering | Server always recalculates from DB — client price never trusted |
+| Payment replay | Idempotency check on `razorpayOrderId` before order creation |
+| Cart swap | `expectedAmountPaise` stored at order creation, verified at completion |
+| Webhook spoofing | HMAC-SHA256 constant-time signature verification |
+| Review fraud | Verified-purchase + delivered-status + product-in-order checks |
+| Admin mutations | All admin actions require `adminUsers` table lookup |
+| Rate limiting | Max 5 checkout sessions per 10 min per user |
+| Stock integrity | DB writes happen ONLY after amount verification passes |
+
+---
+
+## 🪝 Razorpay Webhook Setup
+
+The webhook auto-recovers orders when the browser closes after payment but before the checkout callback fires (e.g. network drop, tab closed after paying).
+
+1. Go to **Razorpay Dashboard → Settings → Webhooks → Add New Webhook**
+2. **URL:** `https://<your-deployment>.convex.site/razorpay-webhook`
+3. **Secret:** Any strong random string
+4. **Events:** `payment.captured` (selecting all is fine — other events are silently ignored)
+5. Add the same secret as `RAZORPAY_WEBHOOK_SECRET` in **Convex Dashboard → Environment Variables**
+
+---
+
+## ⏰ Scheduled Jobs
+
+| Schedule | Job |
+|----------|-----|
+| Every 5 min | Process email queue |
+| Every 5 min | Process WhatsApp queue |
+| Daily 10:00 AM IST | Order packing reminders to admin |
+| Daily 11:00 AM IST | Stale cart follow-up emails |
+| Daily 12:00 PM IST | Post-delivery thank-you emails |
+| Daily 1:00 PM IST | Review request emails |
+| Daily 2:00 PM IST | Browse abandonment WhatsApp |
+| Daily 11:30 AM IST | Cart abandonment WhatsApp |
+| Daily 4:00 AM IST | Database garbage collection (expired sessions, stale reservations) |
+
