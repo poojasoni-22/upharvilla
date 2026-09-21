@@ -338,7 +338,7 @@ WhatsApp notifications rely on approved pre-configured Meta utility templates. C
 
   UpharVilla | upharvilla.in
   ```
-* **Variables:** `{{1}}` Customer Name, `{{2}}` Order ID, `{{3}}` Review link (`upharvilla.in/my-orders`).
+* **Variables:** `{{1}}`  Customer Name, `{{2}}` Order ID, `{{3}}` Review link (`upharvilla.in/my-orders`).
 
 ---
 
