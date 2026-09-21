@@ -95,8 +95,21 @@ export const updateStatus = mutation({
     ),
   },
   handler: async (ctx, args) => {
+    // ── Admin-only: verify caller is an authenticated admin/owner/manager ──
+    const identity = await ctx.auth.getUserIdentity();
+    if (!identity) throw new Error("Not authenticated");
+
+    const adminRecord = await ctx.db
+      .query("adminUsers")
+      .withIndex("by_userId", (q) => q.eq("userId", identity.subject))
+      .first();
+    if (!adminRecord) {
+      throw new Error("Unauthorized: Admin access required to update order status.");
+    }
+
     const order = await ctx.db.get(args.orderId);
     if (!order) throw new Error("Order not found");
+
 
     const patch: any = { orderStatus: args.status };
     if (args.status === "shipped") {

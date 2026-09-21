@@ -41,6 +41,16 @@ export const env = {
     return secret;
   },
 
+  // Separate secret set in Razorpay Dashboard → Webhooks → Secret.
+  // Different from RAZORPAY_KEY_SECRET — this is only for webhook signature verification.
+  get RAZORPAY_WEBHOOK_SECRET(): string {
+    const secret = process.env.RAZORPAY_WEBHOOK_SECRET;
+    if (!secret) {
+      throw new Error("Missing environment variable: RAZORPAY_WEBHOOK_SECRET");
+    }
+    return secret;
+  },
+
   // ── Optional Brevo Template IDs (Parsed to Numbers) ──────────────────────
   get BREVO_TEMPLATE_ORDER_CONFIRMATION(): number | undefined {
     const val = process.env.BREVO_TEMPLATE_ORDER_CONFIRMATION;

@@ -162,6 +162,15 @@ export const listAllReviews = query({
 export const deleteReview = mutation({
   args: { id: v.id("reviews") },
   handler: async (ctx, args) => {
+    // ── Admin-only ────────────────────────────────────────────────────────
+    const identity = await ctx.auth.getUserIdentity();
+    if (!identity) throw new Error("Not authenticated");
+    const adminRecord = await ctx.db
+      .query("adminUsers")
+      .withIndex("by_userId", (q) => q.eq("userId", identity.subject))
+      .first();
+    if (!adminRecord) throw new Error("Unauthorized: Admin access required.");
+
     await ctx.db.delete(args.id);
   },
 });

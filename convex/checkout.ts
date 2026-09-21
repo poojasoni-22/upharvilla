@@ -543,11 +543,23 @@ export const completeCheckout = mutation({
     }
 
     // ── Server-side total recalculation from DB prices ─────────────────────
-    // The amount stored in the order record is ALWAYS computed here from the
-    // product table — the client never has authority over the price.
-    const orderItems = [];
+    // SECURITY NOTE: All stock writes and DB mutations happen ONLY AFTER the
+    // amount verification check below. This prevents a bug where stock was
+    // permanently decremented even when the amount check threw an error.
+    //
+    // Pass 1: READ-ONLY — compute totals, validate stock, build orderItems.
+    // Pass 2: WRITE — only executes after amount check passes.
+    const orderItems: {
+      productId: Id<"products">;
+      name: string;
+      price: number;
+      quantity: number;
+      thumbnail?: string;
+    }[] = [];
     let totalPrice = 0;
 
+    // Fetch all product records (read-only — no DB writes yet)
+    const productSnapshots: { res: (typeof validReservations)[number]; product: NonNullable<Awaited<ReturnType<typeof ctx.db.get<"products">>>>}[] = [];
     for (const res of validReservations) {
       const product = await ctx.db.get(res.productId);
       if (!product) throw new Error("A reserved product no longer exists.");
@@ -555,14 +567,6 @@ export const completeCheckout = mutation({
       if (product.stock < res.quantity) {
         throw new Error(`Insufficient warehouse stock for "${product.name}".`);
       }
-
-      // Decrement stock
-      await ctx.db.patch(res.productId, {
-        stock: product.stock - res.quantity,
-      });
-
-      // Mark reservation completed
-      await ctx.db.patch(res._id, { status: "completed" });
 
       totalPrice += product.price * res.quantity;
 
@@ -573,10 +577,18 @@ export const completeCheckout = mutation({
         quantity: res.quantity,
         thumbnail: product.thumbnail,
       });
+
+      productSnapshots.push({ res, product });
     }
 
-    // ── Server-side coupon redemption (atomic — inside the same mutation) ───
+    // ── Server-side coupon discount calculation (read-only pass) ────────────
     let couponDiscount = 0;
+    let couponToRedeem: {
+      _id: Id<"coupons">;
+      currentUsageCount: number;
+      discountAmount: number;
+    } | null = null;
+
     if (args.couponCode) {
       const upperCode = args.couponCode.trim().toUpperCase();
       if (upperCode) {
@@ -606,38 +618,25 @@ export const completeCheckout = mutation({
             totalPrice >= coupon.minOrderAmount;
 
           if (globalOk && userOk && minOk) {
-            // Calculate discount
+            let calculatedDiscount = 0;
             if (coupon.discountType === "percentage") {
               const pct = Math.min(Math.max(coupon.discountValue, 0), 100);
-              couponDiscount = Math.round((totalPrice * pct) / 100);
+              calculatedDiscount = Math.round((totalPrice * pct) / 100);
               if (
                 coupon.maxDiscount !== undefined &&
-                couponDiscount > coupon.maxDiscount
+                calculatedDiscount > coupon.maxDiscount
               ) {
-                couponDiscount = coupon.maxDiscount;
+                calculatedDiscount = coupon.maxDiscount;
               }
             } else if (coupon.discountType === "flat") {
-              couponDiscount = Math.min(
+              calculatedDiscount = Math.min(
                 Math.max(coupon.discountValue, 0),
                 totalPrice,
               );
             }
-            // free_shipping: couponDiscount stays 0
-
-            couponDiscount = Math.min(couponDiscount, totalPrice); // never exceed total
-
-            // Record usage atomically
-            await ctx.db.insert("couponUsages", {
-              couponId: coupon._id,
-              userId,
-              discountAmount: couponDiscount,
-              usedAt: now,
-            });
-
-            // Increment counter
-            await ctx.db.patch(coupon._id, {
-              currentUsageCount: coupon.currentUsageCount + 1,
-            });
+            // free_shipping: calculatedDiscount stays 0
+            couponDiscount = Math.min(calculatedDiscount, totalPrice);
+            couponToRedeem = { _id: coupon._id, currentUsageCount: coupon.currentUsageCount, discountAmount: couponDiscount };
           }
         }
       }
@@ -648,11 +647,35 @@ export const completeCheckout = mutation({
     // ── Amount verification (prevents cart-swap fraud) ──────────────────────
     // Ensures the amount paid matches what was calculated when the Razorpay
     // order was created. Blocks: pay ₹100 → swap cart to ₹5000 → complete.
+    // IMPORTANT: This must run BEFORE any stock or coupon DB writes.
     const recalculatedPaise = Math.round(finalAmount * 100);
     if (recalculatedPaise !== checkoutSession.expectedAmountPaise) {
       throw new Error(
         "Your cart has changed since payment was initiated. Please checkout again.",
       );
+    }
+
+    // ── Pass 2: All DB writes — only reached after amount check passes ───────
+    for (const { res, product } of productSnapshots) {
+      // Decrement stock
+      await ctx.db.patch(res.productId, {
+        stock: product.stock - res.quantity,
+      });
+      // Mark reservation completed
+      await ctx.db.patch(res._id, { status: "completed" });
+    }
+
+    // Write coupon redemption (only if applicable)
+    if (couponToRedeem) {
+      await ctx.db.insert("couponUsages", {
+        couponId: couponToRedeem._id,
+        userId,
+        discountAmount: couponToRedeem.discountAmount,
+        usedAt: now,
+      });
+      await ctx.db.patch(couponToRedeem._id, {
+        currentUsageCount: couponToRedeem.currentUsageCount + 1,
+      });
     }
 
     // ── Create order record ────────────────────────────────────────────────
@@ -828,5 +851,270 @@ export const purgeStaleDatabaseRecords = internalMutation({
     for (const session of staleSessions) {
       await ctx.db.delete(session._id);
     }
+  },
+});
+
+// ── Webhook Recovery: Complete an order when browser missed the callback ─────
+// Called ONLY by the Razorpay webhook HTTP action (convex/http.ts).
+// This handles the case where:
+//   - Payment succeeded in Razorpay
+//   - But the browser closed/crashed before completeCheckout() was called
+//   - So money was captured but no order was created
+//
+// Recovery logic:
+//   1. Find the checkoutSession by razorpayOrderId
+//   2. If already "completed" → skip (idempotent)
+//   3. Find user's reservations → compute total → verify against expectedAmountPaise
+//   4. Find user's default address
+//   5. All DB writes (stock, reservation, coupon, order) in one atomic mutation
+export const _recoverPaymentFromWebhook = internalMutation({
+  args: {
+    razorpayOrderId: v.string(),
+    razorpayPaymentId: v.string(),
+    amountPaise: v.number(), // from Razorpay webhook payload — used for sanity check
+  },
+  handler: async (ctx, args) => {
+    const now = Date.now();
+
+    // ── Idempotency: skip if order already exists ────────────────────────────
+    const existingOrder = await ctx.db
+      .query("orders")
+      .withIndex("by_razorpay_order", (q) =>
+        q.eq("razorpayOrderId", args.razorpayOrderId),
+      )
+      .first();
+    if (existingOrder) {
+      console.log(
+        `[Webhook] Order already exists for ${args.razorpayOrderId} — skipping recovery`,
+      );
+      return { status: "already_completed", orderId: existingOrder._id };
+    }
+
+    // ── Find the checkout session ────────────────────────────────────────────
+    const session = await ctx.db
+      .query("checkoutSessions")
+      .withIndex("by_razorpay_order", (q) =>
+        q.eq("razorpayOrderId", args.razorpayOrderId),
+      )
+      .first();
+
+    if (!session) {
+      console.error(
+        `[Webhook] No checkoutSession found for ${args.razorpayOrderId}`,
+      );
+      return { status: "no_session" };
+    }
+
+    if (session.status === "completed") {
+      console.log(
+        `[Webhook] Session already completed for ${args.razorpayOrderId}`,
+      );
+      return { status: "already_completed" };
+    }
+
+    // ── Sanity check: webhook amount must match what our server computed ──────
+    if (args.amountPaise !== session.expectedAmountPaise) {
+      console.error(
+        `[Webhook] Amount mismatch for ${args.razorpayOrderId}: ` +
+          `webhook=${args.amountPaise} expected=${session.expectedAmountPaise}`,
+      );
+      return { status: "amount_mismatch" };
+    }
+
+    const userId = session.userId as Id<"user">;
+
+    // ── Find user's active reservations ─────────────────────────────────────
+    const validReservations = await ctx.db
+      .query("reservations")
+      .withIndex("by_user_active", (q) =>
+        q.eq("userId", userId).eq("status", "reserved"),
+      )
+      .collect();
+
+    if (validReservations.length === 0) {
+      console.error(
+        `[Webhook] No active reservations for user ${userId} (order ${args.razorpayOrderId})`,
+      );
+      return { status: "no_reservations" };
+    }
+
+    // ── Find default delivery address ────────────────────────────────────────
+    const addresses = await ctx.db
+      .query("addresses")
+      .withIndex("by_user", (q) => q.eq("userId", userId))
+      .collect();
+
+    const address =
+      addresses.find((a) => a.isDefault) ?? addresses[0] ?? null;
+
+    if (!address) {
+      console.error(
+        `[Webhook] No address found for user ${userId} — cannot recover order`,
+      );
+      return { status: "no_address" };
+    }
+
+    // ── Pass 1: READ-ONLY — compute total, validate stock ────────────────────
+    const orderItems: {
+      productId: Id<"products">;
+      name: string;
+      price: number;
+      quantity: number;
+      thumbnail?: string;
+    }[] = [];
+    let totalPrice = 0;
+    const productSnapshots: {
+      res: (typeof validReservations)[number];
+      product: NonNullable<
+        Awaited<ReturnType<typeof ctx.db.get<"products">>>
+      >;
+    }[] = [];
+
+    for (const res of validReservations) {
+      const product = await ctx.db.get(res.productId);
+      if (!product) {
+        console.error(`[Webhook] Product ${res.productId} no longer exists`);
+        return { status: "missing_product" };
+      }
+
+      totalPrice += product.price * res.quantity;
+      orderItems.push({
+        productId: res.productId,
+        name: product.name,
+        price: product.price,
+        quantity: res.quantity,
+        thumbnail: product.thumbnail,
+      });
+      productSnapshots.push({ res, product });
+    }
+
+    // ── Verify recalculated amount matches stored session ────────────────────
+    const finalAmount = Math.max(0, totalPrice) + PLATFORM_FEE;
+    const recalculatedPaise = Math.round(finalAmount * 100);
+
+    if (recalculatedPaise !== session.expectedAmountPaise) {
+      console.error(
+        `[Webhook] Recalculated amount mismatch for ${args.razorpayOrderId}: ` +
+          `recalc=${recalculatedPaise} expected=${session.expectedAmountPaise}`,
+      );
+      return { status: "amount_mismatch" };
+    }
+
+    // ── Pass 2: WRITE — all DB mutations only after checks pass ──────────────
+    for (const { res, product } of productSnapshots) {
+      await ctx.db.patch(res.productId, {
+        stock: product.stock - res.quantity,
+      });
+      await ctx.db.patch(res._id, { status: "completed" });
+    }
+
+    // ── Create the order record ──────────────────────────────────────────────
+    const orderId = await ctx.db.insert("orders", {
+      userId,
+      addressId: address._id,
+      items: orderItems,
+      totalAmount: finalAmount,
+      razorpayOrderId: args.razorpayOrderId,
+      razorpayPaymentId: args.razorpayPaymentId,
+      paymentStatus: "paid",
+      orderStatus: "placed",
+      createdAt: now,
+    });
+
+    await incrementCounter(ctx, "orders");
+
+    // ── Mark checkout session completed ──────────────────────────────────────
+    await ctx.db.patch(session._id, { status: "completed" });
+
+    // ── Clear the checked-out items from the cart ────────────────────────────
+    for (const res of validReservations) {
+      const cartItem = await ctx.db
+        .query("carts")
+        .withIndex("by_user_and_product", (q) =>
+          q.eq("userId", userId).eq("productId", res.productId),
+        )
+        .first();
+      if (cartItem) {
+        await ctx.db.delete(cartItem._id);
+      }
+    }
+
+    // ── Trigger post-order notifications (fire-and-forget) ───────────────────
+    const formattedAddress = `${address.fullName}, ${address.address}, ${address.city}, ${address.state} – ${address.pincode}`;
+
+    // Look up user email
+    const userRecord = await ctx.db.get(userId as any);
+    const userEmail = (userRecord as any)?.email as string | undefined;
+
+    if (userEmail) {
+      await ctx.scheduler.runAfter(
+        0,
+        internal.emails.orderEmail.sendOrderConfirmation,
+        {
+          customerEmail: userEmail,
+          customerName: address.fullName,
+          orderId: orderId as string,
+          razorpayPaymentId: args.razorpayPaymentId,
+          items: orderItems.map((i) => ({
+            name: i.name,
+            price: i.price,
+            quantity: i.quantity,
+            thumbnail: i.thumbnail,
+          })),
+          totalAmount: finalAmount,
+          address: formattedAddress,
+        },
+      );
+
+      await ctx.scheduler.runAfter(
+        0,
+        internal.emails.adminEmail.notifyAdminNewOrder,
+        {
+          orderId: orderId as string,
+          customerName: address.fullName,
+          customerEmail: userEmail,
+          items: orderItems.map((i) => ({
+            name: i.name,
+            price: i.price,
+            quantity: i.quantity,
+            thumbnail: i.thumbnail,
+          })),
+          totalAmount: finalAmount,
+          address: formattedAddress,
+        },
+      );
+    }
+
+    // WhatsApp confirmation
+    const waPhone = address.phone.startsWith("+")
+      ? address.phone
+      : `+91${address.phone.replace(/^0+/, "")}`;
+
+    if (waPhone.length >= 12) {
+      const itemsSummary = orderItems
+        .map((i) => `${i.quantity}x ${i.name}`)
+        .join(", ");
+      const firstThumbnail = orderItems[0]?.thumbnail || "";
+
+      await ctx.scheduler.runAfter(
+        0,
+        internal.whatsapp.orderNotifications.sendOrderConfirmationWhatsApp,
+        {
+          phone: waPhone,
+          customerName: address.fullName,
+          orderId: orderId as string,
+          totalAmount: finalAmount,
+          itemsSummary,
+          thumbnailUrl: firstThumbnail,
+        },
+      );
+    }
+
+    await ctx.scheduler.runAfter(0, internal.products.recalculateMostSold, {});
+
+    console.log(
+      `[Webhook] ✅ Recovered order ${orderId} for payment ${args.razorpayPaymentId}`,
+    );
+    return { status: "recovered", orderId };
   },
 });
