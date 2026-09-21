@@ -40,10 +40,16 @@ export const list = query({
 
     const userMap = new Map<string, { name: string; email: string }>();
     for (const uid of userIdSet) {
-      const user = await ctx.db
-        .query("user")
-        .withIndex("userId", (q) => q.eq("userId", uid))
-        .first();
+      let user: any = null;
+      try {
+        user = await ctx.db.get(uid as Id<"user">);
+      } catch {}
+      if (!user) {
+        user = await ctx.db
+          .query("user")
+          .withIndex("userId", (q) => q.eq("userId", uid))
+          .first();
+      }
       if (user) userMap.set(uid, { name: user.name, email: user.email });
     }
 
@@ -116,10 +122,16 @@ export const updateStatus = mutation({
 
     await ctx.db.patch(args.orderId, patch);
 
-    const user = await ctx.db
-      .query("user")
-      .withIndex("userId", (q) => q.eq("userId", order.userId))
-      .first();
+    let user: any = null;
+    try {
+      user = await ctx.db.get(order.userId as Id<"user">);
+    } catch {}
+    if (!user) {
+      user = await ctx.db
+        .query("user")
+        .withIndex("userId", (q) => q.eq("userId", order.userId))
+        .first();
+    }
     if (
       user?.email &&
       (args.status === "shipped" ||
@@ -619,22 +631,36 @@ export const listUserOrders = query({
       return [];
     }
 
-    let userId = identity.subject as Id<"user">;
+    const validUserIds = new Set<string>([identity.subject]);
     if (identity.email) {
       const dbUser = await ctx.db
         .query("user")
         .withIndex("email_name", (q) => q.eq("email", identity.email!))
         .first();
       if (dbUser) {
-        userId = dbUser._id;
+        validUserIds.add(dbUser._id);
+        if (dbUser.userId) validUserIds.add(dbUser.userId);
       }
     }
 
-    const orders = await ctx.db
-      .query("orders")
-      .withIndex("by_user", (q) => q.eq("userId", userId))
-      .order("desc")
-      .collect();
+    const allOrders = [];
+    for (const uid of validUserIds) {
+      const userOrders = await ctx.db
+        .query("orders")
+        .withIndex("by_user", (q) => q.eq("userId", uid))
+        .order("desc")
+        .collect();
+      allOrders.push(...userOrders);
+    }
+
+    // Deduplicate by order ID and sort descending
+    const orderMap = new Map<string, any>();
+    for (const ord of allOrders) {
+      orderMap.set(ord._id, ord);
+    }
+    const orders = Array.from(orderMap.values()).sort(
+      (a, b) => b.createdAt - a.createdAt,
+    );
 
     return await Promise.all(
       orders.map(async (order) => {
@@ -661,14 +687,15 @@ export const getById = query({
       throw new Error("You must be logged in to view your order details");
     }
 
-    let userId = identity.subject as Id<"user">;
+    const validUserIds = new Set<string>([identity.subject]);
     if (identity.email) {
       const dbUser = await ctx.db
         .query("user")
         .withIndex("email_name", (q) => q.eq("email", identity.email!))
         .first();
       if (dbUser) {
-        userId = dbUser._id;
+        validUserIds.add(dbUser._id);
+        if (dbUser.userId) validUserIds.add(dbUser.userId);
       }
     }
     const order = await ctx.db.get(args.orderId);
@@ -677,7 +704,7 @@ export const getById = query({
       return null;
     }
 
-    if (order.userId !== userId) {
+    if (!validUserIds.has(order.userId)) {
       throw new Error("You do not have permission to view this order");
     }
 

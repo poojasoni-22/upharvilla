@@ -329,11 +329,27 @@ export const LocationSelector = () => {
             <div className="grid grid-cols-3 gap-1.5">
               {[
                 { name: "Vapi", pincode: "396191", display: "Vapi, Gujarat" },
-                { name: "Valsad", pincode: "396001", display: "Valsad, Gujarat" },
-                { name: "Navsari", pincode: "396445", display: "Navsari, Gujarat" },
+                {
+                  name: "Valsad",
+                  pincode: "396001",
+                  display: "Valsad, Gujarat",
+                },
+                {
+                  name: "Navsari",
+                  pincode: "396445",
+                  display: "Navsari, Gujarat",
+                },
                 { name: "Surat", pincode: "395003", display: "Surat, Gujarat" },
-                { name: "Mumbai", pincode: "400001", display: "Mumbai, Maharashtra" },
-                { name: "Ahmedabad", pincode: "380001", display: "Ahmedabad, Gujarat" },
+                {
+                  name: "Mumbai",
+                  pincode: "400001",
+                  display: "Mumbai, Maharashtra",
+                },
+                {
+                  name: "Ahmedabad",
+                  pincode: "380001",
+                  display: "Ahmedabad, Gujarat",
+                },
               ].map((city) => (
                 <button
                   key={city.name}
@@ -345,7 +361,10 @@ export const LocationSelector = () => {
                       isManual: true,
                     };
                     setLocation(newLocation);
-                    localStorage.setItem("user_location", JSON.stringify(newLocation));
+                    localStorage.setItem(
+                      "user_location",
+                      JSON.stringify(newLocation),
+                    );
                     toast.success(`Location set to ${city.display}`);
                     setIsOpen(false);
                   }}

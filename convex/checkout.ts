@@ -48,6 +48,38 @@ async function verifyRazorpaySignature(
 
 const RESERVATION_EXPIRY_MS = 10 * 60 * 1000; // 10 minutes
 const PLATFORM_FEE = 9; // ₹9 — defined once server-side, never from client
+const RATE_LIMIT_WINDOW_MS = 10 * 60 * 1000; // 10 minutes
+const MAX_CHECKOUT_ATTEMPTS_PER_WINDOW = 5; // Max pending orders created per 10m window
+
+// ── Internal: Check Checkout Rate Limit ───────────────────────────────────
+// Anti-carding & anti-bot protection: throttles rapid/uncompleted checkout sessions.
+export const _checkCheckoutRateLimit = internalQuery({
+  args: { userId: v.string() },
+  handler: async (ctx, args) => {
+    const windowStart = Date.now() - RATE_LIMIT_WINDOW_MS;
+    const pendingSessions = await ctx.db
+      .query("checkoutSessions")
+      .withIndex("by_user_status", (q) =>
+        q.eq("userId", args.userId).eq("status", "pending"),
+      )
+      .collect();
+
+    // Count pending (uncompleted) attempts created in the current window
+    const recentPending = pendingSessions.filter(
+      (s) => s.createdAt > windowStart,
+    );
+
+    if (recentPending.length >= MAX_CHECKOUT_ATTEMPTS_PER_WINDOW) {
+      return {
+        allowed: false,
+        reason:
+          "Too many payment attempts. Please wait a few minutes before trying again.",
+      };
+    }
+
+    return { allowed: true };
+  },
+});
 
 // ── Internal: Fetch active reservations with product data ─────────────────
 // Used by createRazorpayOrder action to compute the authoritative price.
@@ -259,6 +291,18 @@ export const createRazorpayOrder = action({
     const identity = await ctx.auth.getUserIdentity();
     if (!identity) throw new Error("You must be logged in to checkout");
     const userId = identity.subject;
+
+    // ── Velocity / Anti-Bot Rate Limit Check ──────────────────────────────
+    const rateCheck = await ctx.runQuery(
+      internal.checkout._checkCheckoutRateLimit,
+      { userId },
+    );
+    if (!rateCheck.allowed) {
+      throw new Error(
+        rateCheck.reason ||
+          "Too many payment attempts. Please wait a few minutes before trying again.",
+      );
+    }
 
     const keyId = env.RAZORPAY_KEY_ID;
     const keySecret = env.RAZORPAY_KEY_SECRET;
@@ -773,6 +817,16 @@ export const purgeStaleDatabaseRecords = internalMutation({
 
     for (const cart of oldCarts) {
       await ctx.db.delete(cart._id);
+    }
+
+    // 3. Purge stale checkout sessions older than 24 hours (abandoned bot attempts or incomplete checkouts)
+    const staleSessions = await ctx.db
+      .query("checkoutSessions")
+      .filter((q) => q.lt(q.field("createdAt"), oneDayAgo))
+      .collect();
+
+    for (const session of staleSessions) {
+      await ctx.db.delete(session._id);
     }
   },
 });

@@ -101,7 +101,7 @@ export default function UserOrdersPage() {
     if (!displayOrders) return [];
     return displayOrders.flatMap((order) => {
       const orderReviews = (order as any).reviews || [];
-      return order.items.map((item, idx) => {
+      return order.items.map((item: any, idx: number) => {
         const itemId = `${order._id}-${item.productId}-${idx}`;
         const itemReview = orderReviews.find((r: any) => r.itemId === itemId);
         return {
@@ -196,7 +196,7 @@ export default function UserOrdersPage() {
       .map((order) => {
         const orderReviews = (order as any).reviews || [];
         const items = order.items
-          .map((item, idx) => {
+          .map((item: any, idx: number) => {
             const itemId = `${order._id}-${item.productId}-${idx}`;
             const itemReview = orderReviews.find(
               (r: any) => r.itemId === itemId,
@@ -218,7 +218,7 @@ export default function UserOrdersPage() {
               review: itemReview || null,
             };
           })
-          .filter((it) => filteredItemIds.has(it.itemId));
+          .filter((it: any) => filteredItemIds.has(it.itemId));
 
         if (items.length === 0) return null;
 

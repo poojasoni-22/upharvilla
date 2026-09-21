@@ -31,10 +31,16 @@ export const _getOrdersForReview = internalQuery({
 
     const results = [];
     for (const order of eligible) {
-      const user = await ctx.db
-        .query("user")
-        .filter((q) => q.eq(q.field("_id"), order.userId))
-        .first();
+      let user: any = null;
+      try {
+        user = await ctx.db.get(order.userId as any);
+      } catch {}
+      if (!user) {
+        user = await ctx.db
+          .query("user")
+          .withIndex("userId", (q) => q.eq("userId", order.userId))
+          .first();
+      }
       if (user?.email)
         results.push({
           email: user.email,

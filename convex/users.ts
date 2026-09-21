@@ -1,6 +1,6 @@
 import { v } from "convex/values";
-import { internalMutation, mutation } from "./_generated/server";
 import { components } from "./_generated/api";
+import { internalMutation, mutation } from "./_generated/server";
 
 export const syncUserCreated = internalMutation({
   args: {
@@ -74,13 +74,16 @@ export const syncUserUpdated = internalMutation({
 export const backfillUsers = mutation({
   args: {},
   handler: async (ctx) => {
-    const usersResult = await ctx.runQuery(components.betterAuth.adapter.findMany as any, {
-      model: "user",
-      paginationOpts: {
-        numItems: 1000,
-        cursor: null,
+    const usersResult = await ctx.runQuery(
+      components.betterAuth.adapter.findMany as any,
+      {
+        model: "user",
+        paginationOpts: {
+          numItems: 1000,
+          cursor: null,
+        },
       },
-    });
+    );
 
     let count = 0;
     for (const u of usersResult.page) {

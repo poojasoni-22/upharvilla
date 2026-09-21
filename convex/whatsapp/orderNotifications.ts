@@ -236,10 +236,16 @@ export const _getUsersWithStaleCarts = internalQuery({
       if (waPhone.length < 12) continue;
 
       // Get user name
-      const user = await ctx.db
-        .query("user")
-        .filter((q) => q.eq(q.field("_id"), entry.userId))
-        .first();
+      let user: any = null;
+      try {
+        user = await ctx.db.get(entry.userId as any);
+      } catch {}
+      if (!user) {
+        user = await ctx.db
+          .query("user")
+          .withIndex("userId", (q) => q.eq("userId", entry.userId))
+          .first();
+      }
 
       // Get first product thumbnail
       const product = await ctx.db.get(entry.firstProductId as Id<"products">);
@@ -364,10 +370,16 @@ export const _getUsersWithBrowseAbandonment = internalQuery({
       if (waPhone.length < 12) continue;
 
       // Get user name
-      const user = await ctx.db
-        .query("user")
-        .filter((q) => q.eq(q.field("_id"), entry.userId))
-        .first();
+      let user: any = null;
+      try {
+        user = await ctx.db.get(entry.userId as any);
+      } catch {}
+      if (!user) {
+        user = await ctx.db
+          .query("user")
+          .withIndex("userId", (q) => q.eq("userId", entry.userId))
+          .first();
+      }
 
       // Get product info
       const product = await ctx.db.get(entry.productId as Id<"products">);
